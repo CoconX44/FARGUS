@@ -7,23 +7,24 @@ const fs = require('fs');
 
 function setupMusic(client) {
   const { execSync } = require('child_process');
-  const ytdlpBin = path.join(process.cwd(), 'node_modules/yt-dlp-wrap/bin/yt-dlp');
-  console.log('[yt-dlp] binary exists:', fs.existsSync(ytdlpBin), '|', ytdlpBin);
-  try {
-    const ver = execSync(`"${ytdlpBin}" --version 2>&1`, { timeout: 10000 }).toString().trim();
-    console.log('[yt-dlp] execution OK, version:', ver);
-  } catch (e) {
-    console.error('[yt-dlp] EXECUTION FAILED:', e.message);
-  }
 
-  const ffmpegPath = require('ffmpeg-static');
-  console.log('[ffmpeg] path:', ffmpegPath, '| exists:', fs.existsSync(ffmpegPath));
+  // Use system ffmpeg (apt-get) — full codec support including HLS/SoundCloud streams
+  let ffmpegPath = 'ffmpeg';
+  try {
+    ffmpegPath = execSync('which ffmpeg', { timeout: 5000 }).toString().trim();
+    const ver = execSync(`${ffmpegPath} -version 2>&1`, { timeout: 5000 }).toString().split('\n')[0];
+    console.log('[ffmpeg] using:', ffmpegPath, '|', ver);
+  } catch (e) {
+    // fallback to ffmpeg-static if system ffmpeg not found
+    ffmpegPath = require('ffmpeg-static');
+    console.log('[ffmpeg] fallback to ffmpeg-static:', ffmpegPath);
+  }
 
   try {
     const sodium = require('libsodium-wrappers');
-    sodium.ready.then(() => console.log('[sodium] libsodium-wrappers ready'));
+    sodium.ready.then(() => console.log('[sodium] ready'));
   } catch (e) {
-    console.error('[sodium] MISSING libsodium-wrappers:', e.message);
+    console.error('[sodium] MISSING:', e.message);
   }
 
   client.distube = new DisTube(client, {
