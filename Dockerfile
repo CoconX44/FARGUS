@@ -25,7 +25,6 @@ RUN mkdir -p node_modules/yt-dlp-wrap/bin \
 # bestaudio/best forces an audio-only stream so ffmpeg gets usable data
 RUN mkdir -p /root/.config/yt-dlp && cat > /root/.config/yt-dlp/config <<'EOF'
 --extractor-args youtube:player_client=tv_embedded,ios
--f bestaudio/best
 --no-playlist
 --no-check-certificate
 --prefer-free-formats

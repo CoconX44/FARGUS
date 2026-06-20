@@ -88,7 +88,7 @@ module.exports = {
       });
     } catch (err) {
       console.error('[play] error:', err);
-      const msg = err.message ?? String(err);
+      const msg = String(err.message ?? err).slice(0, 800);
       await interaction.editReply({
         embeds: [
           new EmbedBuilder()

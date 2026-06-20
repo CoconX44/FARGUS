@@ -7,10 +7,11 @@ const { saveData } = require('../modules/sticky');
 
 const PREFIX = '!';
 
-// helper — sends a quick embed reply
+// helper — sends a quick embed reply (Discord description limit: 4096)
 function reply(message, color, text) {
+  const safe = String(text).slice(0, 4000);
   return message.reply({
-    embeds: [new EmbedBuilder().setColor(color).setDescription(text)],
+    embeds: [new EmbedBuilder().setColor(color).setDescription(safe)],
   });
 }
 
@@ -48,7 +49,8 @@ const COMMANDS = {
         textChannel: message.channel,
       });
     } catch (err) {
-      reply(message, 0xED4245, `❌ ${err.message}`);
+      const msg = String(err.message ?? err).slice(0, 800);
+      reply(message, 0xED4245, `❌ ${msg}`);
     }
   },
 
