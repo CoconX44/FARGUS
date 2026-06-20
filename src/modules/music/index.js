@@ -11,8 +11,6 @@ function setupMusic(client) {
     ],
     emitNewSongOnly: true,
     joinNewVoiceChannel: true,
-    leaveOnFinish: false,
-    leaveOnEmpty: false,
   });
 
   registerDisTubeEvents(client.distube);
@@ -60,12 +58,19 @@ function registerDisTubeEvents(distube) {
     ]});
   });
 
-  distube.on('finish', (queue) => {
+  distube.on('finish', async (queue) => {
+    const voiceChannel = queue.voiceChannel;
     queue.textChannel?.send({ embeds: [
       new EmbedBuilder()
         .setColor(0xFEE75C)
         .setDescription('✅ Queue finished. Use `!play` or `/play` to add more songs!')
     ]});
+    // Rejoin after DisTube disconnects so the bot stays 24/7
+    if (voiceChannel) {
+      setTimeout(async () => {
+        try { await distube.voices.join(voiceChannel); } catch {}
+      }, 500);
+    }
   });
 
   distube.on('disconnect', (queue) => {
