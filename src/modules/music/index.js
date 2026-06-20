@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 
 function setupMusic(client) {
-  const { execSync } = require('child_process');
+  const { execSync, spawnSync } = require('child_process');
 
   // Use system ffmpeg (apt-get) — full codec support including HLS/SoundCloud streams
   let ffmpegPath = 'ffmpeg';
@@ -15,7 +15,6 @@ function setupMusic(client) {
     const ver = execSync(`${ffmpegPath} -version 2>&1`, { timeout: 5000 }).toString().split('\n')[0];
     console.log('[ffmpeg] using:', ffmpegPath, '|', ver);
   } catch (e) {
-    // fallback to ffmpeg-static if system ffmpeg not found
     ffmpegPath = require('ffmpeg-static');
     console.log('[ffmpeg] fallback to ffmpeg-static:', ffmpegPath);
   }
@@ -25,6 +24,42 @@ function setupMusic(client) {
     sodium.ready.then(() => console.log('[sodium] ready'));
   } catch (e) {
     console.error('[sodium] MISSING:', e.message);
+  }
+
+  // Check Opus encoder
+  try {
+    require('@discordjs/opus');
+    console.log('[opus] @discordjs/opus (native) loaded');
+  } catch (e) {
+    try {
+      require('opusscript');
+      console.log('[opus] opusscript (JS fallback) loaded');
+    } catch (e2) {
+      console.error('[opus] NO ENCODER FOUND — audio will not work!');
+    }
+  }
+
+  // Diagnose yt-dlp connectivity — output shows in Railway logs
+  try {
+    const ytdlpPath = execSync('which yt-dlp', { timeout: 5000 }).toString().trim();
+    console.log('[yt-dlp] binary:', ytdlpPath);
+    const ver = execSync(`${ytdlpPath} --version 2>&1`, { timeout: 5000 }).toString().trim();
+    console.log('[yt-dlp] version:', ver);
+
+    // Test: can yt-dlp reach YouTube at all?
+    const titleTest = spawnSync(
+      ytdlpPath,
+      ['--get-title', '--no-playlist', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'],
+      { timeout: 30000, encoding: 'utf8' },
+    );
+    if (titleTest.status === 0) {
+      console.log('[yt-dlp] YouTube reachable ✓ title:', titleTest.stdout.trim());
+    } else {
+      console.error('[yt-dlp] YouTube UNREACHABLE ✗');
+      console.error('[yt-dlp] stderr:', (titleTest.stderr || '').slice(0, 600));
+    }
+  } catch (e) {
+    console.error('[yt-dlp] diagnostic error:', e.message);
   }
 
   client.distube = new DisTube(client, {
