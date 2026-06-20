@@ -2,6 +2,7 @@ const { DisTube } = require('distube');
 const { SoundCloudPlugin } = require('@distube/soundcloud');
 const { YtDlpPlugin } = require('@distube/yt-dlp');
 const { EmbedBuilder } = require('discord.js');
+const { joinVoiceChannel } = require('@discordjs/voice');
 function setupMusic(client) {
   client.distube = new DisTube(client, {
     ffmpeg: { path: require('ffmpeg-static') },
@@ -58,18 +59,25 @@ function registerDisTubeEvents(distube) {
     ]});
   });
 
-  distube.on('finish', async (queue) => {
+  distube.on('finish', (queue) => {
     const voiceChannel = queue.voiceChannel;
     queue.textChannel?.send({ embeds: [
       new EmbedBuilder()
         .setColor(0xFEE75C)
         .setDescription('✅ Queue finished. Use `!play` or `/play` to add more songs!')
     ]});
-    // Rejoin after DisTube disconnects so the bot stays 24/7
+    // Stay in voice channel using @discordjs/voice directly (avoids DisTube loop)
     if (voiceChannel) {
-      setTimeout(async () => {
-        try { await distube.voices.join(voiceChannel); } catch {}
-      }, 500);
+      setTimeout(() => {
+        try {
+          joinVoiceChannel({
+            channelId: voiceChannel.id,
+            guildId: voiceChannel.guild.id,
+            adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+            selfDeaf: true,
+          });
+        } catch {}
+      }, 1000);
     }
   });
 
