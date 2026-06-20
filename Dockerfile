@@ -5,13 +5,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     ca-certificates \
+    build-essential \
+    libopus-dev \
     && pip3 install yt-dlp --break-system-packages \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm install --omit=dev
 
 # Copy yt-dlp into the path yt-dlp-wrap expects
 RUN mkdir -p node_modules/yt-dlp-wrap/bin \

@@ -30,8 +30,8 @@ function setupMusic(client) {
   client.distube = new DisTube(client, {
     ffmpeg: { path: ffmpegPath },
     plugins: [
-      new SoundCloudPlugin(),
-      new YtDlpPlugin({ update: false }),
+      new YtDlpPlugin({ update: false }),  // handles YouTube AND SoundCloud via yt-dlp
+      new SoundCloudPlugin(),              // fallback for SoundCloud if yt-dlp fails
     ],
     emitNewSongOnly: true,
     joinNewVoiceChannel: true,
