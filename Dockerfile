@@ -21,14 +21,22 @@ RUN mkdir -p node_modules/yt-dlp-wrap/bin \
     && chmod +x node_modules/yt-dlp-wrap/bin/yt-dlp \
     && echo "yt-dlp version: $(yt-dlp --version)"
 
-# yt-dlp config: tv_embedded + ios clients bypass YouTube cloud IP blocks
-# bestaudio/best forces an audio-only stream so ffmpeg gets usable data
+# yt-dlp config:
+#   ios client works from cloud IPs AND exposes audio-only format 140 (m4a)
+#   which satisfies the 'bestaudio' selector that @distube/yt-dlp hardcodes.
+#   tv_embedded has no audio-only streams so bestaudio always fails with it.
 RUN mkdir -p /root/.config/yt-dlp && cat > /root/.config/yt-dlp/config <<'EOF'
---extractor-args youtube:player_client=tv_embedded,ios
+--extractor-args youtube:player_client=ios,tv_embedded
 --no-playlist
 --no-check-certificate
 --prefer-free-formats
 EOF
+
+# @distube/yt-dlp v2 hardcodes --no-call-home which is deprecated in yt-dlp 2025+.
+# Patch it out so the warning doesn't appear in Discord error messages.
+RUN find /app/node_modules/@distube/yt-dlp -name "*.js" \
+      -exec grep -lq "no-call-home" {} \; \
+      -exec sed -i 's/"--no-call-home"[, ]*//g; s/, *"--no-call-home"//g' {} \; 2>/dev/null || true
 
 # Verify yt-dlp can actually reach YouTube from this build environment
 RUN echo "=== yt-dlp YouTube connectivity test ===" \
