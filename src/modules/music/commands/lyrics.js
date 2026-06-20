@@ -1,104 +1,138 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
-// lyrics.ovh — free, no API key needed
-async function fetchLyrics(query) {
-  // Step 1: search to get proper artist + title
-  const searchRes = await fetch(
-    `https://api.lyrics.ovh/suggest/${encodeURIComponent(query)}`
-  );
-  if (!searchRes.ok) throw new Error('Lyrics service unavailable.');
+const LYRICS_OVH_SEARCH = 'https://api.lyrics.ovh/suggest/';
+const LYRICS_OVH_GET = 'https://api.lyrics.ovh/v1/';
 
-  const searchData = await searchRes.json();
-  if (!searchData.data?.length) throw new Error(`No results found for: **${query}**`);
-
-  const hit = searchData.data[0];
-  const artist = hit.artist.name;
-  const title = hit.title;
-
-  // Step 2: fetch the actual lyrics
-  const lyricsRes = await fetch(
-    `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`
-  );
-  const lyricsData = await lyricsRes.json();
-
-  if (lyricsData.error || !lyricsData.lyrics) {
-    throw new Error(`Lyrics not available for **${title}** by ${artist}.`);
-  }
-
-  return {
-    lyrics: lyricsData.lyrics.trim(),
-    title,
-    artist,
-    cover: hit.album?.cover_medium || null,
-  };
-}
-
-function splitIntoChunks(text, maxLen = 4000) {
+/**
+ * Splits a long lyrics string into chunks of at most maxLen characters,
+ * breaking on newlines where possible.
+ * @param {string} text
+ * @param {number} maxLen
+ * @returns {string[]}
+ */
+function splitLyrics(text, maxLen = 4000) {
   const chunks = [];
-  let current = '';
-  for (const line of text.split('\n')) {
-    if ((current + '\n' + line).length > maxLen) {
-      chunks.push(current.trim());
-      current = line;
-    } else {
-      current += (current ? '\n' : '') + line;
-    }
+  let remaining = text;
+  while (remaining.length > maxLen) {
+    let splitAt = remaining.lastIndexOf('\n', maxLen);
+    if (splitAt <= 0) splitAt = maxLen;
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt).trimStart();
   }
-  if (current.trim()) chunks.push(current.trim());
+  if (remaining.length > 0) chunks.push(remaining);
   return chunks;
 }
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('lyrics')
-    .setDescription('Get lyrics for the current or a specified song')
+    .setDescription('Fetch lyrics for a song.')
     .addStringOption(opt =>
-      opt.setName('song')
-        .setDescription('Song name to search (leave empty for current song)')
+      opt
+        .setName('song')
+        .setDescription('Song name (and optionally artist), e.g. "Shape of You" or "Ed Sheeran Shape of You"')
+        .setRequired(true),
     ),
 
-  async execute(interaction, client) {
+  async execute(interaction) {
+    const query = interaction.options.getString('song', true);
     await interaction.deferReply();
 
-    const queue = client.distube.getQueue(interaction.guild);
-    const searchQuery = interaction.options.getString('song') ||
-      queue?.songs[0]?.name?.replace(/\(.*?\)|\[.*?\]/g, '').trim();
-
-    if (!searchQuery) {
-      return interaction.editReply({ embeds: [
-        new EmbedBuilder()
-          .setColor(0xED4245)
-          .setDescription('❌ No song is playing and no search query was provided!')
-      ]});
-    }
-
     try {
-      const { lyrics, title, artist, cover } = await fetchLyrics(searchQuery);
-      const chunks = splitIntoChunks(lyrics);
+      // Step 1: Search for the song on lyrics.ovh
+      const searchUrl = LYRICS_OVH_SEARCH + encodeURIComponent(query);
+      const searchRes = await fetch(searchUrl);
 
-      const firstEmbed = new EmbedBuilder()
-        .setColor(0x5865F2)
-        .setTitle(`🎤 ${title}`)
-        .setDescription(chunks[0])
-        .setFooter({ text: `${artist} • Powered by lyrics.ovh` });
-
-      if (cover) firstEmbed.setThumbnail(cover);
-
-      await interaction.editReply({ embeds: [firstEmbed] });
-
-      for (let i = 1; i < Math.min(chunks.length, 3); i++) {
-        await interaction.followUp({ embeds: [
-          new EmbedBuilder().setColor(0x5865F2).setDescription(chunks[i])
-        ]});
+      if (!searchRes.ok) {
+        return interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0xED4245)
+              .setDescription('❌ Could not reach the lyrics service. Try again later.'),
+          ],
+        });
       }
 
+      const searchData = await searchRes.json();
+      const results = searchData?.data;
+
+      if (!results || results.length === 0) {
+        return interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0xFEE75C)
+              .setDescription(`❌ No results found for **${query}**.`),
+          ],
+        });
+      }
+
+      const match = results[0];
+      const artist = match.artist?.name ?? 'Unknown Artist';
+      const title = match.title ?? 'Unknown Title';
+
+      // Step 2: Fetch actual lyrics
+      const lyricsUrl = `${LYRICS_OVH_GET}${encodeURIComponent(artist)}/${encodeURIComponent(title)}`;
+      const lyricsRes = await fetch(lyricsUrl);
+
+      if (!lyricsRes.ok) {
+        return interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0xED4245)
+              .setDescription(`❌ Could not fetch lyrics for **${title}** by **${artist}**.`),
+          ],
+        });
+      }
+
+      const lyricsData = await lyricsRes.json();
+
+      if (!lyricsData.lyrics) {
+        return interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0xFEE75C)
+              .setDescription(
+                `❌ Lyrics not available for **${title}** by **${artist}**.`,
+              ),
+          ],
+        });
+      }
+
+      const lyricsText = lyricsData.lyrics.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+      const chunks = splitLyrics(lyricsText);
+
+      // Send first chunk as the deferred reply
+      await interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(`🎵 ${title}`)
+            .setDescription(chunks[0])
+            .setFooter({ text: `Artist: ${artist} • Powered by lyrics.ovh` }),
+        ],
+      });
+
+      // Send overflow chunks as follow-ups
+      for (let i = 1; i < chunks.length; i++) {
+        await interaction.followUp({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0x5865F2)
+              .setDescription(chunks[i])
+              .setFooter({ text: `${title} (continued ${i + 1}/${chunks.length})` }),
+          ],
+        });
+      }
     } catch (err) {
-      await interaction.editReply({ embeds: [
-        new EmbedBuilder()
-          .setColor(0xED4245)
-          .setTitle('❌ Lyrics Not Found')
-          .setDescription(err.message)
-      ]});
+      console.error('[lyrics] error:', err);
+      await interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xED4245)
+            .setTitle('❌ Lyrics Error')
+            .setDescription(`\`${err.message ?? err}\``),
+        ],
+      });
     }
   },
 };

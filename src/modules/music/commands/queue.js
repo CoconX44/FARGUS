@@ -4,22 +4,33 @@ const { buildQueueEmbed, buildQueueRows, attachQueueCollector } = require('../ut
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('queue')
-    .setDescription('View the song queue with controls'),
+    .setDescription('Display the current song queue.'),
 
-  async execute(interaction, client) {
-    const queue = client.distube.getQueue(interaction.guild);
-    if (!queue?.songs.length) {
-      return interaction.reply({ embeds: [
-        new EmbedBuilder().setColor(0xED4245).setDescription('❌ The queue is empty!')
-      ], flags: 64 });
+  async execute(interaction) {
+    const queue = interaction.client.distube.getQueue(interaction.guild);
+
+    if (!queue || !queue.songs.length) {
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xED4245)
+            .setDescription('❌ The queue is empty.'),
+        ],
+        flags: 64,
+      });
     }
 
+    const embed = buildQueueEmbed(queue, 1);
+    const rows = buildQueueRows(queue, 1);
+
     const msg = await interaction.reply({
-      embeds: [buildQueueEmbed(queue, 1)],
-      components: buildQueueRows(queue, 1),
+      embeds: [embed],
+      components: rows,
       fetchReply: true,
     });
 
-    attachQueueCollector(msg, interaction.guild, client, payload => interaction.editReply(payload));
+    attachQueueCollector(msg, interaction.guild, interaction.client, async (updatedEmbed, updatedRows) => {
+      await msg.edit({ embeds: [updatedEmbed], components: updatedRows }).catch(() => {});
+    }, 1);
   },
 };

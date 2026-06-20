@@ -3,23 +3,46 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('autoplay')
-    .setDescription('Toggle autoplay — keeps playing related songs when queue ends'),
+    .setDescription('Toggle autoplay of related songs when the queue ends.'),
 
-  async execute(interaction, client) {
-    const queue = client.distube.getQueue(interaction.guild);
+  async execute(interaction) {
+    const queue = interaction.client.distube.getQueue(interaction.guild);
 
     if (!queue) {
-      return interaction.reply({ embeds: [
-        new EmbedBuilder().setColor(0xED4245).setDescription('❌ Nothing is playing right now!')
-      ], flags: 64 });
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xED4245)
+            .setDescription('❌ Nothing is playing right now.'),
+        ],
+        flags: 64,
+      });
     }
 
-    const newState = await client.distube.toggleAutoplay(interaction.guild);
+    try {
+      const newState = interaction.client.distube.toggleAutoplay(interaction.guild);
 
-    await interaction.reply({ embeds: [
-      new EmbedBuilder()
-        .setColor(newState ? 0x57F287 : 0xED4245)
-        .setDescription(`🤖 Autoplay is now **${newState ? 'ON' : 'OFF'}**`)
-    ]});
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(newState ? 0x57F287 : 0xFEE75C)
+            .setDescription(
+              newState
+                ? '🔄 Autoplay is now **enabled**. Related songs will play when the queue ends.'
+                : '🔄 Autoplay is now **disabled**.',
+            ),
+        ],
+      });
+    } catch (err) {
+      console.error('[autoplay] error:', err);
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xED4245)
+            .setDescription(`❌ \`${err.message ?? err}\``),
+        ],
+        flags: 64,
+      });
+    }
   },
 };

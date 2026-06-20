@@ -1,54 +1,40 @@
-const play = require('play-dl');
+/**
+ * Resolves Spotify URLs to YouTube search queries using play-dl.
+ * No Spotify API credentials required — play-dl scrapes public metadata.
+ */
+const playdl = require('play-dl');
 
-const SPOTIFY_REGEX = /^https?:\/\/open\.spotify\.com\/(track|playlist|album|artist)\//;
-
+/**
+ * Returns true if the given string is a Spotify track/album/playlist URL.
+ * @param {string} url
+ * @returns {boolean}
+ */
 function isSpotifyUrl(url) {
-  return SPOTIFY_REGEX.test(url);
+  return /open\.spotify\.com\/(track|album|playlist)\//.test(url);
 }
 
 /**
- * Resolves a Spotify URL to YouTube search queries — no API credentials needed.
- * Uses Spotify's public embed API via play-dl.
- *
- * Returns:
- *   { type: 'track', queries: [string], name: string }
- *   { type: 'playlist'|'album', queries: string[], name: string, total: number }
+ * Resolves a Spotify URL to searchable query strings for YouTube.
+ * @param {string} url
+ * @returns {Promise<{ type: string, name: string, queries: string[] }>}
  */
 async function resolveSpotify(url) {
-  const type = play.sp_validate(url);
-  if (!type) throw new Error('Invalid Spotify URL.');
+  const data = await playdl.spotify(url);
 
-  const sp = await play.spotify(url);
-
-  if (type === 'track') {
-    const artist = sp.artists?.[0]?.name ?? '';
-    return {
-      type: 'track',
-      name: sp.name,
-      queries: [`${sp.name} ${artist}`.trim()],
-    };
+  if (data.type === 'track') {
+    const query = `${data.name} ${data.artists[0]?.name ?? ''}`.trim();
+    return { type: 'track', name: data.name, queries: [query] };
   }
 
-  if (type === 'playlist' || type === 'album') {
-    const MAX_TRACKS = 100;
-    const tracks = await sp.all_tracks();
-    const limited = tracks.slice(0, MAX_TRACKS);
-
-    const queries = limited.map(t => {
-      const artist = t.artists?.[0]?.name ?? '';
-      return `${t.name} ${artist}`.trim();
-    });
-
-    return {
-      type,
-      name: sp.name,
-      queries,
-      total: tracks.length,
-    };
+  if (data.type === 'album' || data.type === 'playlist') {
+    await data.fetch();
+    const queries = data.tracks.map(t =>
+      `${t.name} ${t.artists[0]?.name ?? ''}`.trim(),
+    );
+    return { type: data.type, name: data.name, queries };
   }
 
-  // artist page — not playable directly
-  throw new Error('Spotify artist pages are not supported. Link a track, album, or playlist instead.');
+  throw new Error('Unsupported Spotify URL type');
 }
 
 module.exports = { isSpotifyUrl, resolveSpotify };

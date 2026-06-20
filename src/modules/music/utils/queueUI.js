@@ -1,152 +1,318 @@
+/**
+ * Shared Queue embed, button rows, and collector.
+ * Lazy-requires npUI to avoid circular dependency.
+ */
 const {
-  EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
-  ModalBuilder, TextInputBuilder, TextInputStyle,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
 } = require('discord.js');
 const { awaitModal } = require('./awaitModal');
-const { buildNpEmbed, buildNpRows, attachNpCollector } = require('./npUI');
 
-const PER_PAGE = 10;
+const PAGE_SIZE = 10;
 
-function buildQueueEmbed(queue, page) {
-  const total = Math.ceil(queue.songs.length / PER_PAGE);
-  const start = (page - 1) * PER_PAGE;
-  const list = queue.songs.slice(start, start + PER_PAGE).map((s, i) => {
-    const num = start + i;
-    const prefix = num === 0 ? '▶️' : `\`${num}.\``;
-    return `${prefix} **${s.name}** \`${s.formattedDuration}\`\n　└ ${s.user}`;
-  }).join('\n');
+/**
+ * Builds a queue page embed.
+ * @param {import('distube').Queue} queue
+ * @param {number} page  - 1-based page number
+ * @returns {EmbedBuilder}
+ */
+function buildQueueEmbed(queue, page = 1) {
+  const songs = queue.songs;
+  const totalPages = Math.max(1, Math.ceil((songs.length - 1) / PAGE_SIZE));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+
+  // songs[0] is now playing; songs[1..] are queued
+  const nowPlaying = songs[0];
+  const queued = songs.slice(1);
+
+  const startIdx = (safePage - 1) * PAGE_SIZE;
+  const pageItems = queued.slice(startIdx, startIdx + PAGE_SIZE);
+
+  const description =
+    `**Now Playing:**\n▶️ **[${nowPlaying.name}](${nowPlaying.url})** — \`${nowPlaying.formattedDuration}\` — ${nowPlaying.user}\n\n` +
+    (queued.length === 0
+      ? '*No songs in queue.*'
+      : pageItems
+          .map((s, i) => `\`${startIdx + i + 1}.\` **[${s.name}](${s.url})** — \`${s.formattedDuration}\` — ${s.user}`)
+          .join('\n'));
 
   return new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle(`📋 Queue — ${queue.songs.length} song(s)`)
-    .setDescription(list || 'Empty')
+    .setTitle('📋 Music Queue')
+    .setDescription(description)
     .addFields(
-      { name: 'Total Duration', value: queue.formattedDuration,                           inline: true },
-      { name: 'Volume',         value: `${queue.volume}%`,                                inline: true },
-      { name: 'Loop',           value: ['Off','Song','Queue'][queue.repeatMode] ?? 'Off', inline: true },
+      { name: 'Total Songs', value: `${songs.length}`, inline: true },
+      { name: 'Loop', value: ['Off', 'Song', 'Queue'][queue.repeatMode] ?? 'Off', inline: true },
+      { name: 'Autoplay', value: queue.autoplay ? '✅ On' : '❌ Off', inline: true },
     )
-    .setFooter({ text: `Page ${page} / ${total} • Numbers are for Remove/Move` });
-}
-
-function buildQueueRows(queue, page) {
-  const total = Math.ceil(queue.songs.length / PER_PAGE);
-  return [
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('q_prev')  .setEmoji('◀️').setStyle(ButtonStyle.Secondary).setDisabled(page <= 1),
-      new ButtonBuilder().setCustomId('q_next')  .setEmoji('▶️').setStyle(ButtonStyle.Secondary).setDisabled(page >= total),
-      new ButtonBuilder().setCustomId('q_remove').setLabel('Remove Song').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId('q_move')  .setLabel('Move Song')  .setEmoji('↕️').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('q_np')    .setLabel('Now Playing').setEmoji('🎵').setStyle(ButtonStyle.Success),
-    ),
-  ];
+    .setFooter({ text: `Page ${safePage}/${totalPages} • Volume: ${queue.volume}%` });
 }
 
 /**
- * Attaches queue button handling to an already-sent message.
- * @param {Message} msg         - the message containing the queue embed
- * @param {Guild}   guild       - the Discord guild
- * @param {Client}  client      - the Discord client
- * @param {Function} editFn     - (payload) => Promise — edits the message
- * @param {number}  [startPage] - initial page
+ * Builds the ActionRow with pagination and action buttons.
+ * Buttons: ◀️ ▶️ Remove🗑️ Move↕️ NowPlaying🎵
+ * @param {import('distube').Queue} queue
+ * @param {number} page  - 1-based page number
+ * @returns {ActionRowBuilder[]}
  */
-function attachQueueCollector(msg, guild, client, editFn, startPage = 1) {
-  let page = startPage;
+function buildQueueRows(queue, page = 1) {
+  const songs = queue.songs;
+  const totalPages = Math.max(1, Math.ceil((songs.length - 1) / PAGE_SIZE));
+  const safePage = Math.min(Math.max(1, page), totalPages);
 
-  const collector = msg.createMessageComponentCollector({
-    filter: i => ['q_prev','q_next','q_remove','q_move','q_np'].includes(i.customId),
-    time: 5 * 60 * 1000,
-  });
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('q_prev')
+      .setEmoji('◀️')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(safePage <= 1),
+    new ButtonBuilder()
+      .setCustomId('q_next')
+      .setEmoji('▶️')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(safePage >= totalPages),
+    new ButtonBuilder()
+      .setCustomId('q_remove')
+      .setEmoji('🗑️')
+      .setLabel('Remove')
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId('q_move')
+      .setEmoji('↕️')
+      .setLabel('Move')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('q_np')
+      .setEmoji('🎵')
+      .setLabel('Now Playing')
+      .setStyle(ButtonStyle.Success),
+  );
 
-  collector.on('collect', async btn => {
-    const q = client.distube.getQueue(guild);
-    if (!q?.songs.length) {
-      collector.stop();
-      return editFn({ embeds: [new EmbedBuilder().setColor(0xED4245).setDescription('❌ Queue ended.')], components: [] });
-    }
-
-    // ── Now Playing ─────────────────────────────────────────────────────
-    if (btn.customId === 'q_np') {
-      await btn.deferUpdate();
-      const npMsg = await btn.followUp({
-        embeds: [buildNpEmbed(q)],
-        components: buildNpRows(q),
-        fetchReply: true,
-      });
-      attachNpCollector(npMsg, guild, client, payload => npMsg.edit(payload));
-      return;
-    }
-
-    // ── Remove Song ──────────────────────────────────────────────────────
-    if (btn.customId === 'q_remove') {
-      await btn.showModal(
-        new ModalBuilder()
-          .setCustomId('modal_remove')
-          .setTitle('🗑️ Remove a Song')
-          .addComponents(new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId('position')
-              .setLabel(`Song number to remove (1 – ${q.songs.length - 1})`)
-              .setStyle(TextInputStyle.Short).setPlaceholder('e.g. 2').setRequired(true)
-          ))
-      );
-      const submit = await awaitModal(btn.client, 'modal_remove', btn.user.id);
-      if (!submit) return;
-
-      const pos = parseInt(submit.fields.getTextInputValue('position'));
-      const fresh = client.distube.getQueue(guild);
-      if (!fresh || isNaN(pos) || pos < 1 || pos >= fresh.songs.length) {
-        return submit.reply({ content: `❌ Invalid number. Pick 1–${(fresh?.songs.length ?? 2) - 1}.`, flags: 64 });
-      }
-      const removed = fresh.songs.splice(pos, 1)[0];
-      page = Math.min(page, Math.ceil(fresh.songs.length / PER_PAGE) || 1);
-      const payload = { embeds: [buildQueueEmbed(fresh, page)], components: buildQueueRows(fresh, page) };
-      if (submit.isFromMessage()) await submit.update(payload);
-      else { await submit.reply({ content: `🗑️ Removed **${removed.name}**`, flags: 64 }); await editFn(payload); }
-      return;
-    }
-
-    // ── Move Song ────────────────────────────────────────────────────────
-    if (btn.customId === 'q_move') {
-      await btn.showModal(
-        new ModalBuilder()
-          .setCustomId('modal_move')
-          .setTitle('↕️ Move a Song')
-          .addComponents(
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder().setCustomId('from').setLabel(`Song number to move (1 – ${q.songs.length - 1})`).setStyle(TextInputStyle.Short).setPlaceholder('e.g. 3').setRequired(true)
-            ),
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder().setCustomId('to').setLabel(`Move to position (1 – ${q.songs.length - 1})`).setStyle(TextInputStyle.Short).setPlaceholder('e.g. 1').setRequired(true)
-            )
-          )
-      );
-      const submit = await awaitModal(btn.client, 'modal_move', btn.user.id);
-      if (!submit) return;
-
-      const from  = parseInt(submit.fields.getTextInputValue('from'));
-      const to    = parseInt(submit.fields.getTextInputValue('to'));
-      const fresh = client.distube.getQueue(guild);
-      const max   = (fresh?.songs.length ?? 2) - 1;
-      if (!fresh || isNaN(from) || isNaN(to) || from < 1 || from > max || to < 1 || to > max || from === to) {
-        return submit.reply({ content: `❌ Both numbers must be between 1–${max} and different.`, flags: 64 });
-      }
-      const [song] = fresh.songs.splice(from, 1);
-      fresh.songs.splice(to, 0, song);
-      const payload = { embeds: [buildQueueEmbed(fresh, page)], components: buildQueueRows(fresh, page) };
-      if (submit.isFromMessage()) await submit.update(payload);
-      else { await submit.reply({ content: `↕️ Moved **${song.name}** to #${to}`, flags: 64 }); await editFn(payload); }
-      return;
-    }
-
-    // ── Pagination ───────────────────────────────────────────────────────
-    await btn.deferUpdate();
-    const totalPages = Math.ceil(q.songs.length / PER_PAGE);
-    if (btn.customId === 'q_prev') page = Math.max(1, page - 1);
-    if (btn.customId === 'q_next') page = Math.min(totalPages, page + 1);
-    await editFn({ embeds: [buildQueueEmbed(q, page)], components: buildQueueRows(q, page) });
-  });
-
-  collector.on('end', () => editFn({ components: [] }).catch(() => {}));
+  return [row];
 }
 
-module.exports = { PER_PAGE, buildQueueEmbed, buildQueueRows, attachQueueCollector };
+/**
+ * Attaches a component collector to a queue message.
+ * Handles pagination, remove/move via modals, and NP panel.
+ *
+ * @param {import('discord.js').Message} msg
+ * @param {import('discord.js').Guild} guild
+ * @param {import('discord.js').Client} client
+ * @param {function} editFn    - async (embed, rows) => void
+ * @param {number} startPage   - initial page (1-based)
+ */
+function attachQueueCollector(msg, guild, client, editFn, startPage = 1) {
+  let currentPage = startPage;
+
+  const collector = msg.createMessageComponentCollector({ time: 5 * 60 * 1000 });
+
+  collector.on('collect', async btn => {
+    const queue = client.distube.getQueue(guild);
+    if (!queue) {
+      await btn.reply({
+        content: '❌ There is no active queue.',
+        flags: 64,
+      }).catch(() => {});
+      return;
+    }
+
+    const totalPages = Math.max(1, Math.ceil((queue.songs.length - 1) / PAGE_SIZE));
+
+    try {
+      switch (btn.customId) {
+        case 'q_prev':
+          await btn.deferUpdate().catch(() => {});
+          currentPage = Math.max(1, currentPage - 1);
+          await editFn(buildQueueEmbed(queue, currentPage), buildQueueRows(queue, currentPage));
+          break;
+
+        case 'q_next':
+          await btn.deferUpdate().catch(() => {});
+          currentPage = Math.min(totalPages, currentPage + 1);
+          await editFn(buildQueueEmbed(queue, currentPage), buildQueueRows(queue, currentPage));
+          break;
+
+        case 'q_remove': {
+          // Show modal to get position
+          const modal = new ModalBuilder()
+            .setCustomId(`q_remove_modal_${btn.user.id}`)
+            .setTitle('Remove Song from Queue')
+            .addComponents(
+              new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                  .setCustomId('remove_position')
+                  .setLabel('Song position (1 = first in queue)')
+                  .setStyle(TextInputStyle.Short)
+                  .setPlaceholder('e.g. 2')
+                  .setRequired(true),
+              ),
+            );
+
+          await btn.showModal(modal);
+
+          const submission = await awaitModal(
+            client,
+            `q_remove_modal_${btn.user.id}`,
+            btn.user.id,
+          );
+
+          if (!submission) {
+            // Timed out — nothing to do
+            break;
+          }
+
+          await submission.deferUpdate().catch(() => {});
+
+          const rawPos = submission.fields.getTextInputValue('remove_position');
+          const pos = parseInt(rawPos, 10);
+
+          if (isNaN(pos) || pos < 1 || pos >= queue.songs.length) {
+            await submission.followUp({
+              content: `❌ Invalid position. Enter a number between 1 and ${queue.songs.length - 1}.`,
+              flags: 64,
+            }).catch(() => {});
+            break;
+          }
+
+          const removed = queue.songs[pos];
+          queue.songs.splice(pos, 1);
+
+          await submission.followUp({
+            content: `🗑️ Removed **${removed.name}** from the queue.`,
+            flags: 64,
+          }).catch(() => {});
+
+          // Clamp page after removal
+          const newTotal = Math.max(1, Math.ceil((queue.songs.length - 1) / PAGE_SIZE));
+          currentPage = Math.min(currentPage, newTotal);
+          await editFn(buildQueueEmbed(queue, currentPage), buildQueueRows(queue, currentPage));
+          break;
+        }
+
+        case 'q_move': {
+          const modal = new ModalBuilder()
+            .setCustomId(`q_move_modal_${btn.user.id}`)
+            .setTitle('Move Song in Queue')
+            .addComponents(
+              new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                  .setCustomId('move_from')
+                  .setLabel('Move FROM position')
+                  .setStyle(TextInputStyle.Short)
+                  .setPlaceholder('e.g. 3')
+                  .setRequired(true),
+              ),
+              new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                  .setCustomId('move_to')
+                  .setLabel('Move TO position')
+                  .setStyle(TextInputStyle.Short)
+                  .setPlaceholder('e.g. 1')
+                  .setRequired(true),
+              ),
+            );
+
+          await btn.showModal(modal);
+
+          const submission = await awaitModal(
+            client,
+            `q_move_modal_${btn.user.id}`,
+            btn.user.id,
+          );
+
+          if (!submission) break;
+
+          await submission.deferUpdate().catch(() => {});
+
+          const fromRaw = submission.fields.getTextInputValue('move_from');
+          const toRaw = submission.fields.getTextInputValue('move_to');
+          const from = parseInt(fromRaw, 10);
+          const to = parseInt(toRaw, 10);
+          const maxPos = queue.songs.length - 1;
+
+          if (
+            isNaN(from) || from < 1 || from > maxPos ||
+            isNaN(to) || to < 1 || to > maxPos
+          ) {
+            await submission.followUp({
+              content: `❌ Invalid position(s). Enter numbers between 1 and ${maxPos}.`,
+              flags: 64,
+            }).catch(() => {});
+            break;
+          }
+
+          // songs[0] = now playing, so queue positions start at index 1
+          const [song] = queue.songs.splice(from, 1);
+          queue.songs.splice(to, 0, song);
+
+          await submission.followUp({
+            content: `↕️ Moved **${song.name}** from position ${from} to ${to}.`,
+            flags: 64,
+          }).catch(() => {});
+
+          await editFn(buildQueueEmbed(queue, currentPage), buildQueueRows(queue, currentPage));
+          break;
+        }
+
+        case 'q_np': {
+          await btn.deferUpdate().catch(() => {});
+          // Lazy require to avoid circular dependency
+          const { buildNpEmbed, buildNpRows, attachNpCollector } = require('./npUI');
+          const npEmbed = buildNpEmbed(queue);
+          const npRows = buildNpRows(queue);
+          const npMsg = await btn.followUp({
+            embeds: [npEmbed],
+            components: npRows,
+            flags: 64,
+          }).catch(() => null);
+          if (npMsg) {
+            attachNpCollector(npMsg, guild, client, async (embed, rows) => {
+              await npMsg.edit({ embeds: [embed], components: rows }).catch(() => {});
+            });
+          }
+          return;
+        }
+
+        default:
+          await btn.deferUpdate().catch(() => {});
+          break;
+      }
+    } catch (err) {
+      console.error('[queueUI] collector error:', err);
+      // Try to reply if not already deferred
+      try {
+        await btn.followUp({
+          content: `❌ Error: \`${err.message ?? err}\``,
+          flags: 64,
+        });
+      } catch {
+        // Already replied or timed out
+      }
+    }
+  });
+
+  collector.on('end', async () => {
+    try {
+      const queue = client.distube.getQueue(guild);
+      const embed = queue
+        ? buildQueueEmbed(queue, currentPage)
+        : new EmbedBuilder().setColor(0x99AAB5).setDescription('📋 Queue panel expired.');
+      const rows = queue ? buildQueueRows(queue, currentPage) : [];
+      const disabledRows = rows.map(row => {
+        const newRow = ActionRowBuilder.from(row);
+        newRow.components.forEach(btn => btn.setDisabled(true));
+        return newRow;
+      });
+      await editFn(embed, disabledRows);
+    } catch {
+      // Ignore — message may have been deleted
+    }
+  });
+}
+
+module.exports = { buildQueueEmbed, buildQueueRows, attachQueueCollector };

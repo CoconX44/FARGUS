@@ -1,134 +1,170 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const play = require('play-dl');
+const playdl = require('play-dl');
+
+const RESULT_COUNT = 5;
+const COLLECTOR_TIMEOUT = 30_000;
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('search')
-    .setDescription('Search for a song and pick from the top 5 results')
+    .setDescription('Search YouTube for a song and pick from the top results.')
     .addStringOption(opt =>
-      opt.setName('query')
-        .setDescription('Song name or artist')
-        .setRequired(true)
+      opt
+        .setName('query')
+        .setDescription('Search query')
+        .setRequired(true),
     ),
 
-  async execute(interaction, client) {
-    await interaction.deferReply();
-
-    const query = interaction.options.getString('query');
-    const voiceChannel = interaction.member.voice.channel;
+  async execute(interaction) {
+    const query = interaction.options.getString('query', true);
+    const member = interaction.member;
+    const voiceChannel = member.voice?.channel;
 
     if (!voiceChannel) {
-      return interaction.editReply({ embeds: [
-        new EmbedBuilder()
-          .setColor(0xED4245)
-          .setDescription('❌ You must be in a voice channel first!')
-      ]});
+      return interaction.reply({
+        content: '❌ You must be in a voice channel to use `/search`!',
+        flags: 64,
+      });
     }
 
-    // Search YouTube for top 5 results
-    let results;
+    await interaction.deferReply();
+
     try {
-      results = await play.search(query, { source: { youtube: 'video' }, limit: 5 });
-    } catch {
-      return interaction.editReply({ embeds: [
-        new EmbedBuilder()
-          .setColor(0xED4245)
-          .setDescription('❌ Search failed. Try again or use `/play` with a direct link.')
-      ]});
-    }
+      const results = await playdl.search(query, { source: { youtube: 'video' }, limit: RESULT_COUNT });
 
-    if (!results.length) {
-      return interaction.editReply({ embeds: [
-        new EmbedBuilder()
-          .setColor(0xED4245)
-          .setDescription(`❌ No results found for: **${query}**`)
-      ]});
-    }
+      if (!results || results.length === 0) {
+        return interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0xFEE75C)
+              .setDescription(`❌ No YouTube results found for **${query}**.`),
+          ],
+        });
+      }
 
-    // Build results embed
-    const description = results.map((v, i) =>
-      `**${i + 1}.** [${v.title}](${v.url})\n` +
-      `    ⏱️ \`${v.durationRaw}\` • 👤 ${v.channel?.name ?? 'Unknown'}`
-    ).join('\n\n');
+      // Build description list
+      const description = results
+        .map(
+          (r, i) =>
+            `**${i + 1}.** [${r.title}](${r.url})\n` +
+            `> 📺 ${r.channel?.name ?? 'Unknown'} • ⏱️ ${r.durationRaw ?? 'Live'}`,
+        )
+        .join('\n\n');
 
-    const embed = new EmbedBuilder()
-      .setColor(0x5865F2)
-      .setTitle(`🔍 Search results for: ${query}`)
-      .setDescription(description)
-      .setFooter({ text: 'Pick a song below • expires in 30s' });
-
-    // Build number buttons 1–5
-    const row = new ActionRowBuilder().addComponents(
-      results.map((_, i) =>
+      // Build number buttons 1–5 + cancel
+      const buttons = results.map((_, i) =>
         new ButtonBuilder()
           .setCustomId(`search_${i}`)
           .setLabel(`${i + 1}`)
-          .setStyle(ButtonStyle.Primary)
-      )
-    );
+          .setStyle(ButtonStyle.Primary),
+      );
+      buttons.push(
+        new ButtonBuilder()
+          .setCustomId('search_cancel')
+          .setLabel('Cancel')
+          .setStyle(ButtonStyle.Danger),
+      );
 
-    const cancelBtn = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId('search_cancel')
-        .setLabel('Cancel')
-        .setStyle(ButtonStyle.Danger)
-    );
+      const row = new ActionRowBuilder().addComponents(buttons);
 
-    const msg = await interaction.editReply({
-      embeds: [embed],
-      components: [row, cancelBtn],
-    });
+      const msg = await interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(`🔍 Search Results for: ${query}`)
+            .setDescription(description)
+            .setFooter({ text: `Pick a song below • Expires in 30 seconds` }),
+        ],
+        components: [row],
+      });
 
-    // Wait for the user to click
-    const collector = msg.createMessageComponentCollector({
-      filter: i => i.user.id === interaction.user.id,
-      time: 30_000,
-      max: 1,
-    });
+      // Collect button press from the same user
+      const collector = msg.createMessageComponentCollector({
+        filter: btn => btn.user.id === interaction.user.id,
+        time: COLLECTOR_TIMEOUT,
+        max: 1,
+      });
 
-    collector.on('collect', async btnInteraction => {
-      await btnInteraction.deferUpdate();
+      collector.on('collect', async btn => {
+        await btn.deferUpdate().catch(() => {});
 
-      if (btnInteraction.customId === 'search_cancel') {
-        return interaction.editReply({
-          embeds: [new EmbedBuilder().setColor(0xFEE75C).setDescription('🚫 Search cancelled.')],
+        if (btn.customId === 'search_cancel') {
+          await interaction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(0x99AAB5)
+                .setDescription('❌ Search cancelled.'),
+            ],
+            components: [],
+          });
+          return;
+        }
+
+        const index = parseInt(btn.customId.split('_')[1], 10);
+        const chosen = results[index];
+
+        if (!chosen) {
+          await interaction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(0xED4245)
+                .setDescription('❌ Invalid selection.'),
+            ],
+            components: [],
+          });
+          return;
+        }
+
+        await interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0x57F287)
+              .setDescription(`✅ Selected: **[${chosen.title}](${chosen.url})**`),
+          ],
           components: [],
         });
-      }
 
-      const index = parseInt(btnInteraction.customId.replace('search_', ''));
-      const chosen = results[index];
+        try {
+          await interaction.client.distube.play(voiceChannel, chosen.url, {
+            member,
+            textChannel: interaction.channel,
+          });
+        } catch (err) {
+          console.error('[search] play error:', err);
+          await interaction.followUp({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(0xED4245)
+                .setTitle('❌ Playback Error')
+                .setDescription(`\`${err.message ?? err}\``),
+            ],
+            flags: 64,
+          });
+        }
+      });
 
+      collector.on('end', async (_, reason) => {
+        if (reason === 'time') {
+          await interaction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(0x99AAB5)
+                .setDescription('⏱️ Search timed out — no song selected.'),
+            ],
+            components: [],
+          }).catch(() => {});
+        }
+      });
+    } catch (err) {
+      console.error('[search] error:', err);
       await interaction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setColor(0x57F287)
-            .setDescription(`✅ Adding **[${chosen.title}](${chosen.url})** to queue...`)
-        ],
-        components: [],
-      });
-
-      try {
-        await client.distube.play(voiceChannel, chosen.url, {
-          member: interaction.member,
-          textChannel: interaction.channel,
-        });
-      } catch (err) {
-        await interaction.editReply({ embeds: [
-          new EmbedBuilder()
             .setColor(0xED4245)
-            .setDescription(`❌ Could not play this song: \`${err.message}\``)
-        ], components: [] });
-      }
-    });
-
-    collector.on('end', (collected) => {
-      if (collected.size === 0) {
-        interaction.editReply({
-          embeds: [new EmbedBuilder().setColor(0x99AAB5).setDescription('⏱️ Search expired — no song selected.')],
-          components: [],
-        }).catch(() => {});
-      }
-    });
+            .setTitle('❌ Search Error')
+            .setDescription(`\`${err.message ?? err}\``),
+        ],
+      });
+    }
   },
 };

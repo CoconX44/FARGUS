@@ -3,38 +3,64 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('remove')
-    .setDescription('Remove a song from the queue by its position')
+    .setDescription('Remove a song from the queue by its position.')
     .addIntegerOption(opt =>
-      opt.setName('position')
-        .setDescription('Song position in queue (use /queue to see positions)')
-        .setRequired(true)
+      opt
+        .setName('position')
+        .setDescription('Queue position to remove (1 = first song after the current one)')
         .setMinValue(1)
+        .setRequired(true),
     ),
 
-  async execute(interaction, client) {
-    const queue = client.distube.getQueue(interaction.guild);
+  async execute(interaction) {
+    const queue = interaction.client.distube.getQueue(interaction.guild);
 
-    if (!queue || !queue.songs.length) {
-      return interaction.reply({ embeds: [
-        new EmbedBuilder().setColor(0xED4245).setDescription('❌ The queue is empty!')
-      ], flags: 64 });
+    if (!queue || queue.songs.length <= 1) {
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xED4245)
+            .setDescription('❌ The queue is empty.'),
+        ],
+        flags: 64,
+      });
     }
 
-    const pos = interaction.options.getInteger('position');
+    const position = interaction.options.getInteger('position', true);
 
-    if (pos >= queue.songs.length) {
-      return interaction.reply({ embeds: [
-        new EmbedBuilder().setColor(0xED4245).setDescription(`❌ No song at position #${pos}. Queue has ${queue.songs.length - 1} upcoming songs.`)
-      ], flags: 64 });
+    // songs[0] is current; removable range is 1..songs.length-1
+    if (position >= queue.songs.length) {
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xED4245)
+            .setDescription(
+              `❌ Invalid position. Queue has ${queue.songs.length - 1} song(s) after the current one.`,
+            ),
+        ],
+        flags: 64,
+      });
     }
 
-    const removed = queue.songs[pos];
-    queue.songs.splice(pos, 1);
-
-    await interaction.reply({ embeds: [
-      new EmbedBuilder()
-        .setColor(0xFEE75C)
-        .setDescription(`🗑️ Removed **${removed.name}** from the queue.`)
-    ]});
+    try {
+      const [removed] = queue.songs.splice(position, 1);
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0x57F287)
+            .setDescription(`🗑️ Removed **${removed.name}** from position **${position}**.`),
+        ],
+      });
+    } catch (err) {
+      console.error('[remove] error:', err);
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xED4245)
+            .setDescription(`❌ \`${err.message ?? err}\``),
+        ],
+        flags: 64,
+      });
+    }
   },
 };
