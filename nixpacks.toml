@@ -6,5 +6,8 @@ cmds = [
   "npm install",
   "mkdir -p node_modules/yt-dlp-wrap/bin",
   "cp $(which yt-dlp) node_modules/yt-dlp-wrap/bin/yt-dlp",
-  "chmod +x node_modules/yt-dlp-wrap/bin/yt-dlp"
+  "chmod +x node_modules/yt-dlp-wrap/bin/yt-dlp",
+  "echo '=== yt-dlp version ===' && yt-dlp --version",
+  "echo '=== managed binary ===' && ls -la node_modules/yt-dlp-wrap/bin/",
+  "echo '=== ffmpeg-static ===' && node -e \"console.log(require('ffmpeg-static'))\""
 ]

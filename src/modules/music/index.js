@@ -2,27 +2,44 @@ const { DisTube } = require('distube');
 const { SoundCloudPlugin } = require('@distube/soundcloud');
 const { YtDlpPlugin } = require('@distube/yt-dlp');
 const { EmbedBuilder } = require('discord.js');
+const path = require('path');
+const fs = require('fs');
 
 function setupMusic(client) {
+  const ytdlpBin = path.join(process.cwd(), 'node_modules/yt-dlp-wrap/bin/yt-dlp');
+  console.log('[yt-dlp] binary exists:', fs.existsSync(ytdlpBin), '|', ytdlpBin);
+
+  const ffmpegPath = require('ffmpeg-static');
+  console.log('[ffmpeg] path:', ffmpegPath, '| exists:', fs.existsSync(ffmpegPath));
+
+  try {
+    const sodium = require('libsodium-wrappers');
+    sodium.ready.then(() => console.log('[sodium] libsodium-wrappers ready'));
+  } catch (e) {
+    console.error('[sodium] MISSING libsodium-wrappers:', e.message);
+  }
+
   client.distube = new DisTube(client, {
-    ffmpeg: { path: require('ffmpeg-static') },
+    ffmpeg: { path: ffmpegPath },
     plugins: [
       new SoundCloudPlugin(),
-      new YtDlpPlugin({ update: false }), // binary is pre-downloaded at startup
+      new YtDlpPlugin({ update: false }),
     ],
     emitNewSongOnly: true,
     joinNewVoiceChannel: true,
   });
   registerDisTubeEvents(client.distube);
-  console.log('🎵 Music module loaded.');
+  console.log('[music] module loaded');
 }
 
 function registerDisTubeEvents(distube) {
   distube.on('initQueue', queue => {
-    queue.autoplay = true;
+    queue.autoplay = false;
+    console.log('[DisTube] initQueue — guild:', queue.id);
   });
 
   distube.on('playSong', (queue, song) => {
+    console.log(`[DisTube] playSong — "${song.name}" | ${song.formattedDuration} | ${song.url}`);
     queue.textChannel?.send({
       embeds: [
         new EmbedBuilder()
@@ -69,6 +86,7 @@ function registerDisTubeEvents(distube) {
   });
 
   distube.on('finish', queue => {
+    console.log('[DisTube] finish — guild:', queue.id);
     queue.textChannel?.send({
       embeds: [
         new EmbedBuilder()
@@ -88,14 +106,15 @@ function registerDisTubeEvents(distube) {
     });
   });
 
-  distube.on('error', (error, queue) => {
-    console.error('DisTube error:', error.message ?? error);
+  distube.on('error', (error, queue, song) => {
+    console.error('[DisTube ERROR]', error?.message ?? error, '| song:', song?.name ?? 'none');
     queue?.textChannel?.send({
       embeds: [
         new EmbedBuilder()
           .setColor(0xED4245)
           .setTitle('❌ Music Error')
-          .setDescription(`\`${error.message ?? error}\``),
+          .setDescription(`\`${String(error?.message ?? error).slice(0, 1000)}\``)
+          .setFooter({ text: song ? `Song: ${song.name}` : 'No song context' }),
       ],
     });
   });
