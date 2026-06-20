@@ -8,6 +8,7 @@ const commandHandler = require('./handlers/commandHandler');
 const eventHandler = require('./handlers/eventHandler');
 const { setupMusic }         = require('./modules/music');
 const { setup: setupSticky } = require('./modules/sticky');
+const { setupFishing }       = require('./modules/fishing');
 
 const client = new Client({
   intents: [
@@ -22,6 +23,7 @@ client.commands = new Collection();
 
 setupMusic(client);
 setupSticky(client);
+setupFishing();
 commandHandler(client);
 eventHandler(client);
 

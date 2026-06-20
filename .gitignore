@@ -2,3 +2,4 @@ node_modules/
 .env
 *.log
 src/modules/sticky/data/
+src/modules/fishing/data/
