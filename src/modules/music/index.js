@@ -11,6 +11,8 @@ function setupMusic(client) {
     ],
     emitNewSongOnly: true,
     joinNewVoiceChannel: true,
+    leaveOnFinish: false,
+    leaveOnEmpty: false,
   });
 
   registerDisTubeEvents(client.distube);
@@ -62,7 +64,7 @@ function registerDisTubeEvents(distube) {
     queue.textChannel?.send({ embeds: [
       new EmbedBuilder()
         .setColor(0xFEE75C)
-        .setDescription('⏹️ Queue finished. Leaving voice channel.')
+        .setDescription('✅ Queue finished. Use `!play` or `/play` to add more songs!')
     ]});
   });
 
