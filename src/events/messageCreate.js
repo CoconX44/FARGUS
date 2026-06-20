@@ -262,6 +262,14 @@ const COMMANDS = {
     return reply(message, 0xED4245, '❌ Usage: `!sticky set #channel <message>` | `!sticky remove #channel` | `!sticky list`');
   },
 
+  // ── autoplay ─────────────────────────────────────────────────────────────
+  async autoplay(message, args, client) {
+    const queue = client.distube.getQueue(message.guild);
+    if (!queue) return reply(message, 0xED4245, '❌ Nothing is playing right now!');
+    const newState = await client.distube.toggleAutoplay(message.guild);
+    reply(message, newState ? 0x57F287 : 0xED4245, `🤖 Autoplay is now **${newState ? 'ON' : 'OFF'}**`);
+  },
+
   // ── help ─────────────────────────────────────────────────────────────────
   async help(message) {
     message.reply({ embeds: [
@@ -273,7 +281,7 @@ const COMMANDS = {
           { name: '🎵 Playback', value: '`!play <song>` `!pause` `!skip` `!stop`', inline: false },
           { name: '📋 Queue',    value: '`!queue` `!remove <#>` `!shuffle`', inline: false },
           { name: '🎛️ Controls', value: '`!volume <1-150>` `!loop <off/song/queue>` `!seek <time>`', inline: false },
-          { name: '📺 Info',     value: '`!np`', inline: false },
+          { name: '📺 Info',     value: '`!np` `!autoplay`', inline: false },
           { name: '📌 Sticky',   value: '`!sticky set #channel <msg>` `!sticky remove #channel` `!sticky list`', inline: false },
           { name: '🔧 Other',    value: '`!dc` `!help`', inline: false },
           { name: '✨ Slash',    value: 'All commands also work with `/`', inline: false },

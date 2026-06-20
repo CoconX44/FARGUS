@@ -19,6 +19,11 @@ function setupMusic(client) {
 }
 
 function registerDisTubeEvents(distube) {
+  // Enable autoplay by default for every new queue
+  distube.on('initQueue', (queue) => {
+    queue.autoplay = true;
+  });
+
   distube.on('playSong', (queue, song) => {
     queue.textChannel?.send({ embeds: [
       new EmbedBuilder()
@@ -64,7 +69,7 @@ function registerDisTubeEvents(distube) {
     queue.textChannel?.send({ embeds: [
       new EmbedBuilder()
         .setColor(0xFEE75C)
-        .setDescription('✅ Queue finished. Use `!play` or `/play` to add more songs!')
+        .setDescription('✅ Queue finished. Use `!play` or `/play` to add more songs!\nTip: use `!autoplay` or `/autoplay` to keep playing related songs automatically.')
     ]});
     // Stay in voice channel using @discordjs/voice directly (avoids DisTube loop)
     if (voiceChannel) {
