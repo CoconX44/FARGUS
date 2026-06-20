@@ -8,13 +8,13 @@
     "dev": "nodemon src/index.js"
   },
   "dependencies": {
-    "@discordjs/opus": "^0.10.0",
     "@distube/soundcloud": "^2.0.4",
     "@distube/yt-dlp": "^2.0.1",
     "discord.js": "^14.16.3",
     "distube": "^5.2.3",
     "dotenv": "^16.4.5",
     "ffmpeg-static": "^5.2.0",
+    "libsodium-wrappers": "^0.8.4",
     "opusscript": "^0.0.8",
     "play-dl": "^1.9.7"
   },

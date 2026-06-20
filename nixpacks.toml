@@ -1,2 +1,10 @@
 [phases.setup]
-nixPkgs = ["ffmpeg", "libopus", "python3"]
+nixPkgs = ["yt-dlp", "ffmpeg", "python3"]
+
+[phases.build]
+cmds = [
+  "npm install",
+  "mkdir -p node_modules/yt-dlp-wrap/bin",
+  "cp $(which yt-dlp) node_modules/yt-dlp-wrap/bin/yt-dlp",
+  "chmod +x node_modules/yt-dlp-wrap/bin/yt-dlp"
+]
