@@ -7,7 +7,7 @@ function setupMusic(client) {
     ffmpeg: { path: require('ffmpeg-static') },
     plugins: [
       new SoundCloudPlugin(),
-      new YtDlpPlugin({ update: false }),
+      new YtDlpPlugin({ update: true }),
     ],
     emitNewSongOnly: true,
     joinNewVoiceChannel: true,
