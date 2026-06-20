@@ -2,28 +2,37 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const commandHandler = require('./handlers/commandHandler');
 const eventHandler = require('./handlers/eventHandler');
-const { setupMusic }   = require('./modules/music');
+const { setupMusic }         = require('./modules/music');
 const { setup: setupSticky } = require('./modules/sticky');
 
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent, // requires Privileged Intent toggle in Dev Portal
-  ],
-});
+async function main() {
+  // Download yt-dlp binary before bot starts so it's ready for first play
+  try {
+    const { YTDlpWrap } = require('yt-dlp-wrap');
+    console.log('📥 Downloading yt-dlp...');
+    await YTDlpWrap.downloadFromGithub();
+    console.log('✅ yt-dlp ready');
+  } catch (err) {
+    console.warn('⚠️  yt-dlp download failed, YouTube may not work:', err.message);
+  }
 
-client.commands = new Collection();
+  const client = new Client({
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildVoiceStates,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+    ],
+  });
 
-// ── Modules ────────────────────────────────────────────────────────────────
-setupMusic(client);
-setupSticky(client);
-// setupModeration(client);   ← add future modules here
-// setupFun(client);
+  client.commands = new Collection();
 
-// ── Core handlers ──────────────────────────────────────────────────────────
-commandHandler(client);
-eventHandler(client);
+  setupMusic(client);
+  setupSticky(client);
+  commandHandler(client);
+  eventHandler(client);
 
-client.login(process.env.DISCORD_TOKEN);
+  client.login(process.env.DISCORD_TOKEN);
+}
+
+main();

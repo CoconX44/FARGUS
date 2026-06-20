@@ -1,11 +1,15 @@
 const { DisTube } = require('distube');
 const { SoundCloudPlugin } = require('@distube/soundcloud');
+const { YtDlpPlugin } = require('@distube/yt-dlp');
 const { EmbedBuilder } = require('discord.js');
 
 function setupMusic(client) {
   client.distube = new DisTube(client, {
     ffmpeg: { path: require('ffmpeg-static') },
-    plugins: [new SoundCloudPlugin()],
+    plugins: [
+      new SoundCloudPlugin(),
+      new YtDlpPlugin({ update: false }), // binary is pre-downloaded at startup
+    ],
     emitNewSongOnly: true,
     joinNewVoiceChannel: true,
   });
