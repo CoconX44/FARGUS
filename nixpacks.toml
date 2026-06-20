@@ -5,9 +5,12 @@ nixPkgs = ["yt-dlp", "ffmpeg", "python3"]
 cmds = [
   "npm install",
   "mkdir -p node_modules/yt-dlp-wrap/bin",
-  "cp $(which yt-dlp) node_modules/yt-dlp-wrap/bin/yt-dlp",
+  "ln -sf $(readlink -f $(which yt-dlp)) node_modules/yt-dlp-wrap/bin/yt-dlp",
   "chmod +x node_modules/yt-dlp-wrap/bin/yt-dlp",
+  "mkdir -p /root/.config/yt-dlp",
+  "echo '--extractor-args youtube:player_client=tv_embedded,ios,web' > /root/.config/yt-dlp/config",
   "echo '=== yt-dlp version ===' && yt-dlp --version",
-  "echo '=== managed binary ===' && ls -la node_modules/yt-dlp-wrap/bin/",
+  "echo '=== yt-dlp config ===' && cat /root/.config/yt-dlp/config",
+  "echo '=== managed binary ===' && ls -lah node_modules/yt-dlp-wrap/bin/",
   "echo '=== ffmpeg-static ===' && node -e \"console.log(require('ffmpeg-static'))\""
 ]

@@ -6,8 +6,15 @@ const path = require('path');
 const fs = require('fs');
 
 function setupMusic(client) {
+  const { execSync } = require('child_process');
   const ytdlpBin = path.join(process.cwd(), 'node_modules/yt-dlp-wrap/bin/yt-dlp');
   console.log('[yt-dlp] binary exists:', fs.existsSync(ytdlpBin), '|', ytdlpBin);
+  try {
+    const ver = execSync(`"${ytdlpBin}" --version 2>&1`, { timeout: 10000 }).toString().trim();
+    console.log('[yt-dlp] execution OK, version:', ver);
+  } catch (e) {
+    console.error('[yt-dlp] EXECUTION FAILED:', e.message);
+  }
 
   const ffmpegPath = require('ffmpeg-static');
   console.log('[ffmpeg] path:', ffmpegPath, '| exists:', fs.existsSync(ffmpegPath));
